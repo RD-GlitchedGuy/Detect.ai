@@ -53,50 +53,59 @@
     <div class="report hidden" id="report">
       <div class="scanline"></div>
       <div class="hero card">
-        <div class="gauge">
-          <svg viewBox="0 0 200 200">
-            <defs>
-              <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="var(--c1)"/><stop offset=".5" stop-color="var(--c2)"/><stop offset="1" stop-color="var(--c3)"/>
-              </linearGradient>
-            </defs>
-            <circle class="track" cx="100" cy="100" r="84"/>
-            <circle class="bar" id="gaugeBar" cx="100" cy="100" r="84"/>
-          </svg>
-          <div class="gauge-val"><b id="score">0</b><small>% KI</small></div>
-        </div>
-        <div class="verdict">
+        <div class="hero-top">
           <div class="file-name" id="fileName">–</div>
-          <h2 id="verdict">–</h2>
-          <p id="verdictText"></p>
           <div class="chips">
-            <span class="chip" id="confChip">Aussagekraft: –</span>
-            <span class="chip" id="langChip">Sprache: –</span>
+            <span class="chip" id="confChip">–</span>
+            <span class="chip" id="langChip">–</span>
             <span class="chip" id="timeChip">–</span>
           </div>
         </div>
+        <div class="big">
+          <div class="big-num" id="bigNum"><b id="score">0</b><span>%</span></div>
+          <div>
+            <h2 id="verdict">–</h2>
+            <p id="verdictText"></p>
+          </div>
+        </div>
+        <div class="scale">
+          <div class="scale-bar"><i class="z0"></i><i class="z1"></i><i class="z2"></i><span class="marker" id="marker"></span></div>
+          <div class="scale-lbl"><span>Mensch</span><span>unklar</span><span>KI</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Warum dieses Ergebnis?</h3>
+        <ul class="reasons" id="reasons"></ul>
       </div>
 
       <div class="stats" id="stats"></div>
 
       <div class="grid2">
         <div class="card">
-          <h3>Signale</h3>
-          <div id="signals" class="signals"></div>
+          <h3>Aufbau des Dokuments</h3>
+          <div id="structure"></div>
         </div>
         <div class="card">
-          <h3>Gefundene KI-Phrasen</h3>
+          <h3>Auffällige Formulierungen</h3>
           <div id="phrases" class="phrase-cloud"></div>
+          <p class="hint"><span class="ph-k"></span> stark KI-typisch &nbsp; <span class="ph-k w"></span> schwächer</p>
         </div>
       </div>
 
       <div class="card">
         <div class="hl-head">
-          <h3>Satz-Heatmap</h3>
-          <div class="legend"><span class="l0">menschlich</span><span class="l1">unklar</span><span class="l2">KI-typisch</span></div>
+          <h3>Der Text, Satz für Satz</h3>
+          <div class="legend"><span class="l0">unauffällig</span><span class="l1">etwas KI-typisch</span><span class="l2">stark KI-typisch</span></div>
         </div>
+        <p class="hint top">Fahr mit der Maus über einen Satz (oder tipp drauf), um zu sehen, warum er markiert ist.</p>
         <div class="hl" id="highlight"></div>
       </div>
+
+      <details class="card tech">
+        <summary>Technische Details</summary>
+        <div id="tech"></div>
+      </details>
 
       <div class="actions">
         <button class="btn" id="exportBtn">⇩ Bericht speichern</button>

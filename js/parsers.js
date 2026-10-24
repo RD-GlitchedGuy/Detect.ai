@@ -44,12 +44,27 @@
     .replace(/&amp;/g, '&');
   const stripXml = s => ent(s.replace(/<[^>]+>/g, ''));
 
+  // Absätze einzeln, Listenpunkte mit "• " markieren
+  function joinParas(paras) {
+    let out = '';
+    paras.forEach((p, i) => { if (i) out += p.list && paras[i - 1].list ? '\n' : '\n\n'; out += (p.list ? '• ' : '') + p.t; });
+    return out;
+  }
   function fromDocx(x) {
-    return stripXml(x.replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n').replace(/<\/w:p>/g, '\n\n'));
+    return joinParas((x.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map(p => ({
+      list: /<w:numPr>|<w:pStyle w:val="[^"]*(List|Liste|Aufz)/i.test(p),
+      t: stripXml(p.replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n')).trim()
+    })).filter(p => p.t));
   }
   function fromOdt(x) {
-    return stripXml(x.replace(/<text:tab\/>/g, '\t').replace(/<text:line-break\/>/g, '\n')
-      .replace(/<text:s[^>]*\/>/g, ' ').replace(/<\/text:(p|h)>/g, '\n\n'));
+    x = x.replace(/<text:tab\/>/g, '\t').replace(/<text:line-break\/>/g, '\n').replace(/<text:s[^>]*\/>/g, ' ');
+    const paras = [];
+    x.replace(/<text:(p|h)[ >][\s\S]*?<\/text:\1>|<text:list-item[ >]/g, m => {
+      if (m.startsWith('<text:list-item')) paras.pendingList = true;
+      else { const t = stripXml(m).trim(); if (t) paras.push({ t, list: !!paras.pendingList }); paras.pendingList = false; }
+      return m;
+    });
+    return joinParas(paras);
   }
   function fromPptx(files) {
     return Object.keys(files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
@@ -73,18 +88,62 @@
     return doc.body ? doc.body.textContent : '';
   }
 
+  // PDF: Text über Positionen rekonstruieren (Zeilen, Absätze, Überschriften, Listen)
+  const BULLET = /^([•●▪◦○■□➢➤►▶✓✔✅☐→·]|[-–—*+]\s|\d{1,2}[.)]\s|[a-z][.)]\s)/u;
   async function fromPdf(buf) {
     await loadPdfJs();
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     const pages = [];
-    for (let i = 1; i <= Math.min(pdf.numPages, 400); i++) {
-      const tc = await (await pdf.getPage(i)).getTextContent();
-      let t = '';
-      for (const it of tc.items) t += it.str + (it.hasEOL ? '\n' : '');
-      pages.push(t);
+    for (let p = 1; p <= Math.min(pdf.numPages, 400); p++) {
+      const tc = await (await pdf.getPage(p)).getTextContent();
+      const lines = [];
+      let L = null;
+      for (const it of tc.items) {
+        if (!it.str) continue;
+        const x = it.transform[4], y = it.transform[5];
+        const size = Math.abs(it.transform[3]) || it.height || 10;
+        if (!L || Math.abs(y - L.y) > size * 0.5) {
+          if (L && L.text.trim()) lines.push(L);
+          L = { text: '', x, y, size: 0, right: x };
+        } else if (x - L.right > size * 0.2 && !/\s$/.test(L.text) && !/^\s/.test(it.str)) L.text += ' ';
+        L.text += it.str; L.right = Math.max(L.right, x + (it.width || 0));
+        if (it.str.trim().length > (L.len || 0)) { L.len = it.str.trim().length; L.size = size; }   // Größe des Haupttexts, nicht des Bullets
+      }
+      if (L && L.text.trim()) lines.push(L);
+      lines.forEach(l => l.text = l.text.replace(/\s+/g, ' ').trim());
+      pages.push(lines);
     }
-    if (!pages.join('').trim()) throw new Error('PDF enthält keinen Text (eingescannt?)');
-    return pages.join('\n\n');
+    // Kopf-/Fußzeilen und Seitenzahlen entfernen
+    const freq = {};
+    pages.forEach(ls => new Set(ls.map(l => l.text)).forEach(t => freq[t] = (freq[t] || 0) + 1));
+    const all = pages.map(ls => ls.filter(l => !/^(seite|page|página)?\s*\d+(\s*(\/|von|of|de)\s*\d+)?$/i.test(l.text) && !(pages.length >= 3 && freq[l.text] >= 3)));
+    const sizes = {};
+    all.flat().forEach(l => { const k = Math.round(l.size); sizes[k] = (sizes[k] || 0) + l.text.length; });
+    const body = +Object.entries(sizes).sort((a, b) => b[1] - a[1])[0]?.[0] || 10;
+    let out = '';
+    for (const ls of all) {
+      const right = Math.max(...ls.map(l => l.right), 0);
+      const gaps = [];
+      for (let i = 1; i < ls.length; i++) { const g = ls[i - 1].y - ls[i].y; if (g > 0) gaps.push(g); }
+      gaps.sort((a, b) => a - b);
+      const lead = gaps[Math.floor(gaps.length / 2)] || body * 1.3;
+      let prev = null;
+      for (const l of ls) {
+        const head = l.size > body * 1.12 && l.text.split(' ').length <= 15;
+        if (!prev) out += out ? '\n\n' : '';
+        else {
+          const gap = prev.y - l.y;
+          if (head && prev.head && Math.abs(l.size - prev.size) < 0.5 && gap < l.size * 1.6) out += ' ';   // mehrzeilige Überschrift
+          else if (head || prev.head || gap > lead * 1.45 || gap < 0) out += '\n\n';
+          else if (BULLET.test(l.text) || (prev.right < right * 0.8 && /[.!?:]$/.test(prev.text))) out += '\n';
+          else if (/\p{Ll}-$/u.test(prev.text) && /^\p{Ll}/u.test(l.text)) out = out.slice(0, -1);
+          else out += ' ';
+        }
+        out += l.text; l.head = head; prev = l;
+      }
+    }
+    if (!out.trim()) throw new Error('PDF enthält keinen Text (eingescannt?)');
+    return out;
   }
 
   // Harte Zeilenumbrüche (PDF, Mails) zu Fließtext zusammenführen
@@ -96,7 +155,7 @@
       const cur = lines[i], next = lines[i + 1];
       out.push(cur);
       if (next === undefined) break;
-      const join = cur.trim().length > 45 && /[\p{L},;\-–]$/u.test(cur.trim()) &&
+      const join = cur.trim().length > 45 && !BULLET.test(cur.trim()) && /[\p{L},;\-–]$/u.test(cur.trim()) &&
         next.trim() && !/^\s*([-*•#>]|\d+[.)]\s)/u.test(next);
       out.push(join ? ' ' : '\n');
     }
