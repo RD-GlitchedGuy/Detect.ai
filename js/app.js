@@ -13,10 +13,10 @@
       const bin = Uint8Array.from(atob(window.SKY_WASM), c => c.charCodeAt(0));
       W = (await WebAssembly.instantiate(bin)).instance.exports;
       $('engine').className = 'engine on';
-      $('engine').lastElementChild.textContent = 'C++ Engine online';
+      $('engine').lastElementChild.textContent = 'Prüfmodul (C++) bereit';
     } catch (e) {
       $('engine').className = 'engine off';
-      $('engine').lastElementChild.textContent = 'Engine-Fehler';
+      $('engine').lastElementChild.textContent = 'Prüfmodul nicht geladen';
       console.error(e);
     }
   })();
@@ -86,9 +86,11 @@
   const PATTERNS = {
     de: [/\bnicht (nur |bloß |einfach )?[^.!?\n]{1,70}?,\s*sondern\b/giu, /\bes geht (nicht|weniger) (nur |darum |um )/giu,
       /\b(das|der|die) (ergebnis|grund|folge|problem|ziel|fazit|kernproblem|entscheidende|wichtigste|gute|frage)( ist)?:/giu,
-      /\b(ob|egal ob) [^.!?\n]{1,50} oder [^.!?\n]{1,50}[:—–]/giu, /\bkurz:\s/giu, /[→✓✔✅]/gu],
+      /\b(ob|egal ob) [^.!?\n]{1,50} oder [^.!?\n]{1,50}[:—–]/giu, /\bkurz:\s/giu, /[→✓✔✅]/gu,
+      /(^|[.!?]\s+)(dies|das|diese|damit|somit) (zeigt|verdeutlicht|unterstreicht|macht deutlich|wird deutlich)/giu, /\b(lässt sich|kann man) (festhalten|sagen|zusammenfassen),? dass\b/giu],
     en: [/\bnot (just|only|merely) [^.!?\n]{1,70}?[,;—–]\s*(but|it'?s|it is)\b/giu, /\bit'?s not (about )?[^.!?\n]{1,40}[,;—–]\s*(it'?s|but)\b/giu,
-      /\b(the|this) (result|key|catch|reason|goal|problem|takeaway)( is)?:/giu, /\bwhether you'?re\b/giu, /\bthink of it as\b/giu, /[→✓✔✅]/gu],
+      /\b(the|this) (result|key|catch|reason|goal|problem|takeaway)( is)?:/giu, /\bwhether you'?re\b/giu, /\bthink of it as\b/giu, /[→✓✔✅]/gu,
+      /(^|[.!?]\s+)this (highlights|underscores|demonstrates|shows|illustrates)\b/giu, /\bnot because [^.!?\n]{1,60}, but because\b/giu],
     es: [/\bno (solo|sólo|se trata de) [^.!?\n]{1,70}?,?\s*sino\b/giu, /\b(el|la) (resultado|clave|razón|objetivo|problema)( es)?:/giu, /[→✓✔✅]/gu]
   };
   const STOP = {
@@ -129,6 +131,15 @@
     return r;
   }
 
+  // Gegenindizien: persönliche Stimme, Umgangssprache, Belege
+  const FP = { de: /(?<![\p{L}])(ich|mir|mich|mein|meine|meiner|meinen|meinem|meines)(?![\p{L}])/giu,
+    en: /(?<![\p{L}])(I|me|my|mine|I'm|I've|I'd|I'll)(?![\p{L}])/gu, es: /(?<![\p{L}])(yo|mí|conmigo|creo|pienso|opino)(?![\p{L}])/giu };
+  const COLL = { de: /(?<![\p{L}])(halt|irgendwie|naja|quasi|sozusagen|ehrlich gesagt|krass|echt|bisschen|eigentlich|ziemlich|okay)(?![\p{L}])/giu,
+    en: /(?<![\p{L}])(kinda|gonna|wanna|pretty much|honestly|stuff|yeah|guess|anyway|lol)(?![\p{L}])/giu,
+    es: /(?<![\p{L}])(pues|bueno|o sea|vale|la verdad|igual)(?![\p{L}])/giu };
+  const CITE = /\([^()]{0,60}?(?:19|20)\d\d[a-z]?(?:[:,]\s?(?:S\.|p\.|pp\.)?\s?\d+(?:[-–]\d+)?)?\)|(?<![\p{L}])(?:vgl\.|ebd\.|a\.a\.O\.|ibid\.|cf\.)|(?<![\p{L}])S\.\s?\d+|https?:\/\/\S+/giu;
+  const count = (t, re) => (t.match(re) || []).length;
+
   // ---------- Gesamtbewertung ----------
   function analyze(text) {
     const t0 = performance.now();
@@ -159,6 +170,7 @@
       se.dash = /—| – /.test(se.text);
       if (se.dash) se.why.push('Gedankenstrich');
       se.sw = sw; se.ww = ww;
+      se.note = sw ? 'KI-Floskel' : se.pat ? 'typisches KI-Satzmuster' : se.trans ? 'Übergangswort am Satzanfang' : ww ? 'KI-nahes Wort' : se.dash ? 'Gedankenstrich' : 'gleichförmiger Rhythmus';
     }
     const triads = (text.match(/[\p{L}-]{3,}, [\p{L}-]{3,},? (und|and|y|sowie|oder|or) [\p{L}-]{3,}/giu) || []).length;
     const dashes = s.em + (text.match(/ – /g) || []).length;
@@ -175,11 +187,11 @@
     add({ key: 'rhythm', n: 'Satzrhythmus', w: .17, s: prose.sents >= 5 ? clamp((0.62 - prose.cv) / 0.32) : .45,
       tech: `Variationskoeffizient ${prose.cv.toFixed(2)} · Ø ${prose.sMean.toFixed(1)} Wörter/Satz`,
       ai: `Die Sätze sind auffällig gleich lang (meist um die ${Math.round(prose.sMean)} Wörter). Menschen schreiben unregelmäßiger.`,
-      mid: 'Die Satzlängen schwanken mäßig – weder klar menschlich noch klar KI.',
-      hu: 'Kurze und lange Sätze wechseln sich stark ab – typisch für Menschen.' });
+      mid: 'Die Satzlängen schwanken mäßig, weder klar menschlich noch klar KI-typisch.',
+      hu: 'Kurze und lange Sätze wechseln sich stark ab. Das ist typisch für Menschen.' });
     add({ key: 'vocab', n: 'Wortwahl', w: .18, s: clamp(vocab / 9),
       tech: `${strong} starke + ${weak} schwache Treffer · ${vocab.toFixed(1)} Punkte / 1000 Wörter`,
-      ai: `${strong + weak} Formulierungen, die Sprachmodelle besonders gern benutzen (z. B. „${Object.keys(found)[0] || '–'}“).`,
+      ai: `${strong + weak} Formulierungen, die Sprachmodelle besonders gern benutzen (z. B. „${Object.keys(found).sort((a, b) => (lx.map.get(b) || 0) - (lx.map.get(a) || 0))[0] || ''}“).`,
       mid: `Einige KI-nahe Wörter (${strong + weak}), aber nicht auffällig gehäuft.`,
       hu: 'Kaum typische KI-Formulierungen.' });
     add({ key: 'pattern', n: 'Satzbau-Muster', w: .10, s: clamp(per1k(pat + triads * .25) / 5),
@@ -188,34 +200,47 @@
       mid: 'Vereinzelt KI-typische Satzmuster.', hu: 'Keine auffälligen KI-Satzmuster.' });
     add({ key: 'trans', n: 'Satzanfänge', w: .08, s: clamp(trans / realSents / 0.15),
       tech: `${trans} von ${full.s.sents} Sätzen beginnen mit Übergangswort`,
-      ai: `Viele Sätze starten mit Bindewörtern wie „Darüber hinaus“, „Zudem“, „Insgesamt“ (${trans}×).`,
-      mid: `Einige Sätze beginnen mit Übergangswörtern (${trans}×).`, hu: 'Satzanfänge wirken natürlich und abwechslungsreich.' });
+      ai: `Viele Sätze starten mit Bindewörtern wie „Darüber hinaus“, „Zudem“, „Insgesamt“ (${trans}-mal).`,
+      mid: `Einige Sätze beginnen mit Übergangswörtern (${trans}-mal).`, hu: 'Satzanfänge wirken natürlich und abwechslungsreich.' });
     add({ key: 'struct', n: 'Aufbau', w: .16, s: hasStruct ? clamp(0.45 * clamp((headPer1k - 6) / 18) + 0.4 * clamp((bulletShare - 0.08) / 0.35) + 0.3 * clamp(labelShare / 0.15) + clamp(st.bold / 10) * .3) : .3,
       tech: `${st.head} Überschriften (${headPer1k.toFixed(1)}/1000 W.) · ${Math.round(bulletShare * 100)} % Listen · ${st.label} „Stichwort: Erklärung“-Zeilen`,
-      ai: `Sehr viel Struktur: ${st.head} Überschriften, ${st.bullet} Listenpunkte, ${st.label} Zeilen im Stil „Stichwort: Erklärung“ – typisch für KI-Dokumente.`,
+      ai: `Sehr viel Struktur: ${st.head} Überschriften, ${st.bullet} Listenpunkte, ${st.label} Zeilen im Stil „Stichwort: Erklärung“. So sehen KI-Dokumente typischerweise aus.`,
       mid: 'Etwas mehr Gliederung als in normalem Fließtext.',
-      hu: hasStruct ? 'Überwiegend Fließtext mit wenigen Überschriften – wie bei typischen menschlichen Texten.' : 'Reiner Fließtext, keine Gliederung erkennbar.' });
+      hu: hasStruct ? 'Überwiegend Fließtext mit wenigen Überschriften, wie bei den meisten menschlichen Texten.' : 'Reiner Fließtext, keine Gliederung erkennbar.' });
     const uni = [];
     if (st.bLens.length >= 4) uni.push(clamp((0.6 - cvOf(st.bLens)) / 0.4));
     if (paraLens.length >= 4) uni.push(clamp((0.55 - cvOf(paraLens)) / 0.35));
     add({ key: 'uniform', n: 'Gleichförmigkeit', w: .08, s: uni.length ? uni.reduce((a, b) => a + b) / uni.length : .4,
       tech: `Listenpunkte CV ${cvOf(st.bLens).toFixed(2)} · Absätze CV ${cvOf(paraLens).toFixed(2)}`,
-      ai: 'Absätze und Listenpunkte sind fast gleich lang – wirkt „aus einem Guss“ generiert.',
+      ai: 'Absätze und Listenpunkte sind fast gleich lang, als wären sie in einem Zug erzeugt worden.',
       mid: 'Absätze und Listen sind teils gleichförmig.', hu: 'Absätze sind unterschiedlich lang, wie beim natürlichen Schreiben.' });
-    add({ key: 'dash', n: 'Gedankenstriche', w: .08, s: clamp((per1k(dashes) - 1.5) / 7),
+    add({ key: 'dash', n: 'Gedankenstriche', w: .08, s: dashes >= 3 ? clamp((per1k(dashes) - 1.5) / 7) : Math.min(.45, clamp((per1k(dashes) - 1.5) / 7)),
       tech: `${dashes} Gedankenstriche (${per1k(dashes).toFixed(1)} / 1000 W.)`,
-      ai: `Sehr viele Gedankenstriche (${dashes}×) – ein Markenzeichen von ChatGPT und Claude.`,
-      mid: `Einige Gedankenstriche (${dashes}×).`, hu: 'Kaum Gedankenstriche.' });
+      ai: `Sehr viele Gedankenstriche (${dashes}-mal). Das ist ein Markenzeichen von ChatGPT und Claude.`,
+      mid: `Einige Gedankenstriche (${dashes}-mal).`, hu: 'Kaum Gedankenstriche.' });
     add({ key: 'clean', n: 'Fehlerfreiheit', w: .08, s: clamp(1 - noise / 5),
       tech: `${noise.toFixed(1)} Tipp-/Flüchtigkeitsspuren / 1000 W.`,
-      ai: 'Keinerlei Tippfehler-Spuren, doppelte Leerzeichen oder Flüchtigkeiten – sehr glatt.',
+      ai: 'Keine Tippfehler-Spuren, doppelten Leerzeichen oder Flüchtigkeiten. Der Text ist auffällig glatt.',
       mid: 'Wenige Flüchtigkeitsspuren.', hu: 'Typisch menschliche Flüchtigkeiten (doppelte Leerzeichen, „!!“, kleine Satzanfänge).' });
     add({ key: 'lex', n: 'Wortschatz', w: .07, s: prose.words >= 100 ? clamp(1 - Math.abs(prose.mattr - 0.74) / 0.12) : .45,
       tech: `MATTR ${prose.mattr.toFixed(2)} · ${(s.tri * 100).toFixed(1)} % wiederholte 3-Wort-Folgen`,
       ai: 'Die Wortvielfalt liegt genau im „mittleren“ Bereich, in dem Sprachmodelle fast immer landen.',
-      mid: 'Wortvielfalt im normalen Bereich.', hu: 'Ungewöhnliche Wortvielfalt – eher menschlich.' });
+      mid: 'Wortvielfalt im normalen Bereich.', hu: 'Ungewöhnliche Wortvielfalt, eher menschlich.' });
 
-    const raw = sig.reduce((a, x) => a + x.w * x.s, 0);
+    // Gegenindizien
+    const fp = count(text, FP[L]), coll = count(text, COLL[L]), cites = count(text, CITE);
+    const voice = clamp(per1k(fp) / 12 + per1k(coll) / 8), cite = clamp(per1k(cites) / 6);
+    add({ key: 'voice', n: 'Persönliche Stimme', w: 0, s: .45 - .45 * voice, human: true,
+      tech: `${fp} Ich-Formen, ${coll} umgangssprachliche Wörter`,
+      hu: `Der Text klingt nach einer echten Person: ${fp}-mal „ich“ oder „mein“, ${coll} umgangssprachliche Wörter. Sprachmodelle schreiben meist unpersönlich.`,
+      mid: 'Kaum persönliche Stimme, kein „ich“ und keine Umgangssprache. Bei Sachtexten ist das normal und spricht nicht automatisch für KI.' });
+    add({ key: 'cite', n: 'Belege', w: 0, s: .45 - .45 * cite, human: true,
+      tech: `${cites} Quellenangaben, Seitenverweise oder Links`,
+      hu: `${cites === 1 ? 'Eine Quellenangabe oder ein Seitenverweis' : cites + ' Quellenangaben oder Seitenverweise'} (etwa „vgl.“ oder „(Autor 2019: 12)“). So präzise belegen Sprachmodelle selten von sich aus.`,
+      mid: 'Keine Quellenangaben oder Seitenverweise gefunden.' });
+    sig.forEach(x => { if (x.human) x.ai = x.mid; });
+
+    const raw = sig.reduce((a, x) => a + x.w * x.s, 0) - .10 * voice - .08 * cite;
     let score = 100 / (1 + Math.exp(-(raw - 0.36) * 10));
     const conf = s.words < 80 ? 0 : s.words < 250 ? 1 : s.words < 700 ? 2 : 3;
     if (conf === 0) score = 50 + (score - 50) * 0.4;
@@ -227,132 +252,232 @@
       const v = clamp(0.45 * se.score + Math.min(1, se.sw * 0.6 + se.ww * 0.2) * 0.35 + (se.trans ? .15 : 0) + (se.pat ? .2 : 0) + (se.dash ? .1 : 0) - .05);
       se.cls = v < 0.35 ? 0 : v < 0.6 ? 1 : 2;
     }
-    return { s, st, sents: full.sents, tail: full.tail, sig, score, conf, lang: L, found, ms: performance.now() - t0 };
+
+    // Abschnitte à ~150 Wörter
+    const chunks = []; let cur = null;
+    full.sents.forEach(se => {
+      if (!cur || cur.words >= 150) { cur = { words: 0, ss: [] }; chunks.push(cur); }
+      cur.ss.push(se); cur.words += se.words;
+    });
+    if (chunks.length > 1 && chunks[chunks.length - 1].words < 60) {
+      const last = chunks.pop(); chunks[chunks.length - 1].ss.push(...last.ss); chunks[chunks.length - 1].words += last.words;
+    }
+    chunks.forEach((c, i) => {
+      c.ss.forEach(se => se.chunk = i);
+      const lens = c.ss.filter(x => x.words >= 3).map(x => x.words), w = Math.max(c.words, 1), k = x => x / w * 1000;
+      const t = c.ss.map(x => x.text).join(' ');
+      const rc = .28 * (lens.length >= 4 ? clamp((0.62 - cvOf(lens)) / 0.32) : .45)
+        + .32 * clamp(k(c.ss.reduce((a, x) => a + x.sw + x.ww * .35, 0)) / 9)
+        + .15 * clamp(k(c.ss.reduce((a, x) => a + x.pat, 0)) / 5)
+        + .12 * clamp(c.ss.filter(x => x.trans).length / Math.max(lens.length, 1) / .15)
+        + .13 * clamp((k(c.ss.filter(x => x.dash).length) - 1.5) / 7)
+        - .15 * clamp(k(count(t, FP[L]) + count(t, COLL[L]) + count(t, CITE)) / 10);
+      c.score = Math.round(100 / (1 + Math.exp(-(rc - 0.3) * 9)));
+    });
+    const cs = chunks.map(c => c.score);
+    const mixed = chunks.length >= 3 && Math.max(...cs) >= 65 && Math.min(...cs) <= 35;
+
+    const feat = { sMean: prose.sMean, cv: prose.cv, wMean: s.wMean, mattr: prose.mattr, comma: s.comma / Math.max(s.sents, 1),
+      semi: per1k(s.semi + s.colon), dash: per1k(dashes), paren: per1k(s.paren), voice: per1k(fp + coll), vocab, bullets: bulletShare };
+    return { s, st, sents: full.sents, tail: full.tail, sig, score, conf, lang: L, found, chunks, mixed, feat, ms: performance.now() - t0 };
   }
 
-  // ---------- UI ----------
+  // ---------- Oberfläche ----------
   const items = [];
-  let active = null;
-  const col = v => v < 35 ? 'var(--ok)' : v < 65 ? 'var(--mid)' : 'var(--bad)';
-  const VERD = [['Wahrscheinlich von einem Menschen', 'Der Text zeigt die Unregelmäßigkeiten, die für menschliches Schreiben typisch sind.'],
-    ['Unklar – teils KI-typisch', 'Es gibt KI-typische Muster, aber keine eindeutige Tendenz. Möglich ist auch ein von Menschen überarbeiteter KI-Text oder umgekehrt.'],
-    ['Wahrscheinlich KI-generiert', 'Sehr viele Muster, die für ChatGPT, Claude & Co. typisch sind. Trotzdem nur ein starkes Indiz, kein Beweis.']];
-  const CONF = ['sehr gering (zu kurz)', 'gering', 'mittel', 'hoch'];
+  let active = null, ref = null, pasteMode = 'doc';
+  const band = v => v < 35 ? 0 : v < 65 ? 1 : 2;
+  const VERD = [
+    ['Wahrscheinlich von einem Menschen', 'Der Text hat die Unregelmäßigkeiten und Eigenheiten, die für menschliches Schreiben typisch sind.'],
+    ['Unklar, teils KI-typisch', 'Einige Merkmale sind KI-typisch, andere nicht. Das passt zum Beispiel zu einem KI-Entwurf, den jemand überarbeitet hat, oder zu einem sehr glatten menschlichen Text.'],
+    ['Wahrscheinlich KI-generiert', 'Sehr viele Merkmale, die Sprachmodelle wie ChatGPT oder Claude hinterlassen. Das ist ein starkes Indiz, aber kein Beweis.']];
+  const CONF = ['sehr gering, weil der Text zu kurz ist', 'gering, weil der Text kurz ist', 'mittel', 'gut'];
+  const LANGN = { de: 'Deutsch', en: 'Englisch', es: 'Spanisch' };
 
-  function addItem(name, ext) {
-    const it = { id: Math.random().toString(36).slice(2), name, ext, state: 'busy' };
+  function addItem(name) {
+    const it = { id: Math.random().toString(36).slice(2), name, state: 'busy' };
     items.unshift(it); renderQueue(); return it;
   }
   function renderQueue() {
     const q = $('queue');
     if (!items.length) { q.innerHTML = '<li class="empty">Noch nichts geprüft.</li>'; return; }
-    q.innerHTML = items.map(it => `<li class="qi ${it === active ? 'active' : ''} ${it.state === 'err' ? 'err' : ''}" data-id="${it.id}">
-      <span class="ext">${esc(it.ext)}</span><span class="nm" title="${esc(it.name)}">${esc(it.name)}</span>
-      ${it.state === 'busy' ? '<span class="spin"></span>' : it.state === 'err' ? '<span class="pct">Fehler</span>'
-        : `<span class="pct" style="color:${col(it.res.score)}">${it.res.score}%</span>`}</li>`).join('');
+    q.innerHTML = items.map(it => `<li class="${it === active ? 'active' : ''} ${it.state === 'err' ? 'err' : ''}" data-id="${it.id}" tabindex="0">
+      <span class="nm" title="${esc(it.name)}">${esc(it.name)}</span>
+      ${it.state === 'busy' ? '<span class="busy"></span>' : it.state === 'err' ? '<span class="sc">Fehler</span>'
+        : `<span class="sc" style="color:${['var(--green)', '#9a6a00', 'var(--pen)'][band(it.res.score)]}">${it.res.score}</span>`}</li>`).join('');
   }
-  $('queue').addEventListener('click', e => {
-    const li = e.target.closest('.qi'); if (!li) return;
+  const pick = e => {
+    const li = e.target.closest('li[data-id]'); if (!li) return;
     const it = items.find(x => x.id === li.dataset.id);
-    if (it?.state === 'done') show(it); else if (it?.state === 'err') alert(it.name + ':\n' + it.err);
-  });
+    if (it?.state === 'done') show(it); else if (it?.state === 'err') alert(it.name + ': ' + it.err);
+  };
+  $('queue').addEventListener('click', pick);
+  $('queue').addEventListener('keydown', e => { if (e.key === 'Enter') pick(e); });
 
-  async function waitEngine() { for (let i = 0; !W && i < 100; i++) await new Promise(r => setTimeout(r, 50)); if (!W) throw new Error('Engine nicht verfügbar'); }
+  async function waitEngine() { for (let i = 0; !W && i < 100; i++) await new Promise(r => setTimeout(r, 50)); if (!W) throw new Error('Das Prüfmodul konnte nicht geladen werden. Lade die Seite neu.'); }
   async function processFile(file) {
-    const it = addItem(file.name, file.name.includes('.') ? file.name.split('.').pop() : 'txt');
-    try { await waitEngine(); it.doc = /\.(pdf|docx|odt|pptx|rtf)$/i.test(file.name); run(it, await SkyParsers.fileToText(file)); }
+    const it = addItem(file.name);
+    try { await waitEngine(); run(it, await SkyParsers.fileToText(file)); }
     catch (e) { it.state = 'err'; it.err = e.message; renderQueue(); }
   }
   function run(it, text) { it.res = analyze(text); it.state = 'done'; show(it); }
 
   function show(it) {
     active = it; renderQueue();
-    const r = it.res, rep = $('report');
-    $('welcome').classList.add('hidden'); rep.classList.remove('hidden');
-    rep.classList.remove('scanning'); void rep.offsetWidth; rep.classList.add('scanning');
+    const r = it.res, v = band(r.score);
+    $('welcome').classList.add('hidden'); $('report').classList.remove('hidden');
 
-    const v = r.score < 35 ? 0 : r.score < 65 ? 1 : 2;
     $('fileName').textContent = it.name;
-    $('verdict').className = 'v' + v; $('verdict').textContent = VERD[v][0];
+    $('verdict').textContent = VERD[v][0];
     $('verdictText').textContent = VERD[v][1];
-    $('bigNum').style.color = col(r.score);
-    $('confChip').textContent = 'Aussagekraft: ' + CONF[r.conf];
-    $('langChip').textContent = { de: 'Deutsch', en: 'Englisch', es: 'Spanisch' }[r.lang];
-    $('timeChip').textContent = 'Scan: ' + r.ms.toFixed(0) + ' ms';
-    countUp($('score'), r.score);
-    $('marker').style.left = '0%'; void $('marker').offsetWidth; $('marker').style.left = r.score + '%';
+    $('meta').textContent = `${LANGN[r.lang]}, ${Math.round(r.s.words).toLocaleString('de')} Wörter, ${r.s.sents} Sätze, ${r.st.head} Überschriften, ${r.st.bullet} Listenpunkte. Aussagekraft: ${CONF[r.conf]}.`;
 
-    // Warum?
-    const ranked = [...r.sig].sort((a, b) => b.w * Math.abs(b.s - .45) - a.w * Math.abs(a.s - .45));
+    const g = $('gradeNum'); g.className = 'grade-num c' + v; void g.offsetWidth; g.classList.add('drawn');
+    countUp($('score'), r.score);
+    const ru = document.querySelector('.ruler'); ru.classList.remove('go'); $('pin').style.left = '0%';
+    void ru.offsetWidth; ru.classList.add('go'); $('pin').style.left = r.score + '%';
+
+    $('mixed').classList.toggle('hidden', !r.mixed);
+    if (r.mixed) $('mixed').textContent = 'Der Text wirkt nicht einheitlich: Manche Abschnitte sind deutlich KI-typisch, andere deutlich menschlich. Das kommt oft vor, wenn nur Teile mit KI geschrieben wurden. Im Verlauf unten siehst du, welche.';
+
+    const ranked = [...r.sig].sort((a, b) => Math.max(b.w, .09) * Math.abs(b.s - .45) - Math.max(a.w, .09) * Math.abs(a.s - .45));
     $('reasons').innerHTML = ranked.map(x => {
       const t = x.s >= .6 ? 2 : x.s <= .3 ? 0 : 1;
-      return `<li class="r${t}"><span class="dot"></span><div><b>${x.n}</b><p>${esc([x.hu, x.mid, x.ai][t])}</p></div>
-        <span class="pill">${['spricht für Mensch', 'neutral', 'spricht für KI'][t]}</span></li>`;
+      return `<li class="r${t}"><span class="tag">${['für Mensch', 'neutral', 'für KI'][t]}</span><div><b>${x.n}</b><p>${esc([x.hu, x.mid, x.ai][t])}</p></div></li>`;
     }).join('');
 
-    const st = r.st;
-    $('stats').innerHTML = [[Math.round(r.s.words).toLocaleString('de'), 'Wörter'], [r.s.sents, 'Sätze'], [st.head, 'Überschriften'],
-      [st.bullet, 'Listenpunkte'], [Object.values(r.found).reduce((a, b) => a + b, 0), 'KI-Wörter'], [r.sents.filter(x => x.cls === 2).length, 'rote Sätze']]
-      .map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+    const tw = Math.max(r.chunks.reduce((a, c) => a + c.words, 0), 1);
+    $('strip').innerHTML = r.chunks.map((c, i) => `<button type="button" class="s${band(c.score)}" style="flex:${c.words}" data-c="${i}"
+      title="Abschnitt ${i + 1} von ${r.chunks.length}: KI-Score ${c.score}" aria-label="Abschnitt ${i + 1}, KI-Score ${c.score}"></button>`).join('');
 
-    const tot = Math.max(st.head + st.bullet + st.prose, 1), pc = n => (n / tot * 100).toFixed(1) + '%';
-    $('structure').innerHTML = `<div class="stack"><i class="p" style="width:${pc(st.prose)}"></i><i class="b" style="width:${pc(st.bullet)}"></i><i class="h" style="width:${pc(st.head)}"></i></div>
-      <ul class="stack-lbl"><li class="p">Fließtext <b>${st.prose}</b></li><li class="b">Listenpunkte <b>${st.bullet}</b></li><li class="h">Überschriften <b>${st.head}</b></li><li class="l">„Stichwort: Erklärung“ <b>${st.label}</b></li></ul>
-      <p class="hint">KI-Dokumente bestehen oft zu großen Teilen aus Überschriften und Stichpunkt-Listen. Menschliche Texte (z. B. Hausarbeiten) sind meist überwiegend Fließtext.</p>`;
+    const st = r.st, tot = Math.max(st.head + st.bullet + st.prose, 1), pc = n => (n / tot * 100).toFixed(1) + '%';
+    $('structure').innerHTML = `<div class="bar"><i class="p" style="width:${pc(st.prose)}"></i><i class="b" style="width:${pc(st.bullet)}"></i><i class="h" style="width:${pc(st.head)}"></i></div>
+      <ul class="legend-list"><li><span><i style="background:#e7ebf0"></i>Fließtext-Absätze</span><b>${st.prose}</b></li>
+      <li><span><i style="background:var(--hl-yellow)"></i>Listenpunkte</span><b>${st.bullet}</b></li>
+      <li><span><i style="background:var(--hl-pink)"></i>Überschriften</span><b>${st.head}</b></li>
+      <li><span>Zeilen im Stil „Stichwort: Erklärung“</span><b>${st.label}</b></li></ul>
+      <p class="hint" style="margin-top:12px">KI-Dokumente bestehen oft zu großen Teilen aus Überschriften und Stichpunkten. Hausarbeiten und andere menschliche Texte sind meist überwiegend Fließtext.</p>`;
 
-    const f = Object.entries(r.found).sort((a, b) => (r.found && LEX[r.lang].map.get(b[0]) || 0) - (LEX[r.lang].map.get(a[0]) || 0) || b[1] - a[1]).slice(0, 30);
-    $('phrases').innerHTML = f.length ? f.map(([p, n]) => `<span class="ph ${LEX[r.lang].map.get(p) === 1 ? '' : 'w'}">${esc(p)}<b>×${n}</b></span>`).join('')
+    const lm = LEX[r.lang].map;
+    const f = Object.entries(r.found).sort((a, b) => (lm.get(b[0]) || 0) - (lm.get(a[0]) || 0) || b[1] - a[1]).slice(0, 36);
+    $('phrases').innerHTML = f.length ? f.map(([p, n]) => `<span class="${lm.get(p) === 1 ? '' : 'w'}">${esc(p)}<small>${n}×</small></span>`).join(' ')
       : '<span class="none">Keine typischen KI-Formulierungen gefunden.</span>';
 
-    const MAX = 1500;
-    let h = r.sents.slice(0, MAX).map(se => esc(se.gap) + (se.cls < 0 ? se.html
-      : `<s class="h${se.cls}" title="${esc(se.why.length ? se.why.join(' · ') : 'unauffällig')}">${se.html}</s>`)).join('');
-    h += r.sents.length > MAX ? `<span class="more">… ${r.sents.length - MAX} weitere Sätze ausgeblendet</span>` : esc(r.tail);
-    $('highlight').innerHTML = h;
+    renderCompare();
 
-    $('tech').innerHTML = r.sig.map(x => `<div class="trow"><span>${x.n}</span><em>${esc(x.tech)}</em><b>${Math.round(x.s * 100)}</b><small>× ${x.w}</small></div>`).join('');
-    if (innerWidth < 900) rep.scrollIntoView({ behavior: 'smooth' });
+    const fmt = x => esc(x.tech);
+    $('tech').innerHTML = '<tr><th>Merkmal</th><th>Messwert</th><th class="num">Wert</th><th class="num">Gewicht</th></tr>' +
+      r.sig.map(x => `<tr><td>${x.n}</td><td>${fmt(x)}</td><td class="num">${Math.round(x.s * 100)}</td><td class="num">${x.human ? 'Gegenindiz' : x.w}</td></tr>`).join('');
+
+    // Text mit Markierungen
+    const MAX = 2000;
+    let h = '', lastChunk = -1;
+    r.sents.slice(0, MAX).forEach(se => {
+      h += esc(se.gap);
+      if (se.chunk !== lastChunk) { h += `<a id="c${se.chunk}"></a>`; lastChunk = se.chunk; }
+      h += se.cls < 1 ? se.html : `<s class="h${se.cls}" data-note="${esc(se.note)}" title="${esc(se.why.join(', ') || 'unauffällig')}">${se.html}</s>`;
+    });
+    h += r.sents.length > MAX ? `<span class="more">Die restlichen ${r.sents.length - MAX} Sätze werden nicht angezeigt, sind aber in der Bewertung enthalten.</span>` : esc(r.tail);
+    const ht = $('highlight'); ht.classList.remove('drawn'); ht.innerHTML = h;
+    ht.querySelectorAll('s').forEach((el, i) => el.style.setProperty('--d', Math.min(i * 0.025, 1.4) + 's'));
+    requestAnimationFrame(() => requestAnimationFrame(() => ht.classList.add('drawn')));
+    placeNotes();
+    if (innerWidth < 920) $('report').scrollIntoView({ behavior: 'smooth' });
   }
+
+  function placeNotes() {
+    const m = $('margin'); m.innerHTML = '';
+    if (getComputedStyle(m).display === 'none') return;
+    const top0 = m.getBoundingClientRect().top; let last = -100, n = 0;
+    for (const el of document.querySelectorAll('#highlight s.h2')) {
+      if (n > 400) break;
+      const y = el.getBoundingClientRect().top - top0, t = Math.max(y, last + 6);
+      if (t - y > 90) continue;
+      const d = document.createElement('div'); d.className = 'note'; d.style.top = t + 'px'; d.textContent = el.dataset.note;
+      m.appendChild(d); last = t + d.offsetHeight; n++;
+    }
+  }
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => active && placeNotes(), 150); });
+  if (document.fonts) document.fonts.ready.then(() => active && placeNotes());
+
+  $('strip').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const a = document.getElementById('c' + b.dataset.c); if (!a) return;
+    a.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const s = a.nextElementSibling;
+    if (s && s.tagName === 'S') { s.classList.add('focus'); setTimeout(() => s.classList.remove('focus'), 1800); }
+  });
+
+  // Stilvergleich mit einem echten Text derselben Person
+  const FEAT = [['sMean', 'Durchschnittliche Satzlänge', 5, 1], ['cv', 'Wie stark Satzlängen schwanken', .15, 2], ['wMean', 'Durchschnittliche Wortlänge', .5, 1],
+    ['mattr', 'Wortvielfalt', .05, 2], ['comma', 'Kommas pro Satz', .6, 1], ['semi', 'Doppelpunkte und Semikolons je 1000 Wörter', 4, 1],
+    ['dash', 'Gedankenstriche je 1000 Wörter', 3, 1], ['paren', 'Klammern je 1000 Wörter', 4, 1], ['voice', 'Ich-Formen und Umgangssprache je 1000 Wörter', 6, 1],
+    ['vocab', 'KI-typische Wörter je 1000 Wörter', 4, 1], ['bullets', 'Anteil Listenpunkte', .15, 2]];
+  function renderCompare() {
+    const box = $('compare');
+    if (!ref || !active) { box.innerHTML = ''; return; }
+    const a = ref.res.feat, b = active.res.feat;
+    const rows = FEAT.map(([k, n, tol, d]) => { const diff = Math.abs(a[k] - b[k]) / tol; return { n, a: a[k].toFixed(d), b: b[k].toFixed(d), diff }; });
+    const sim = Math.round(rows.reduce((x, r) => x + clamp(1 - (r.diff - .5) / 2.5), 0) / rows.length * 100);
+    const say = sim >= 70 ? 'Der Stil passt gut zum Vergleichstext.' : sim >= 45 ? 'Der Stil ist dem Vergleichstext nur teilweise ähnlich.'
+      : 'Der Stil weicht deutlich vom Vergleichstext ab. Das kann auf KI oder fremde Hilfe hindeuten, aber auch daran liegen, dass es eine andere Textsorte ist.';
+    box.innerHTML = `<div class="cmp"><p class="cmp-head">Stil-Übereinstimmung mit „${esc(ref.name)}“: <b>${sim}</b> von 100. ${say}</p>
+      <table><tr><th>Merkmal</th><th class="num">Vergleichstext</th><th class="num">Dieses Dokument</th><th>Ergebnis</th></tr>
+      ${rows.map(r => `<tr><td>${r.n}</td><td class="num">${r.a}</td><td class="num">${r.b}</td><td><span class="diff ${r.diff <= 1 ? 'same' : 'off'}">${r.diff <= 1 ? 'ähnlich' : 'weicht ab'}</span></td></tr>`).join('')}</table></div>`;
+  }
+  async function setRef(name, getText) {
+    try { await waitEngine(); const text = await getText(); ref = { name, res: analyze(text) }; renderCompare(); }
+    catch (e) { alert('Vergleichstext: ' + e.message); }
+  }
+  $('refFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) setRef(f.name, () => SkyParsers.fileToText(f)); e.target.value = ''; });
 
   function countUp(el, to) {
     const t0 = performance.now();
-    const step = t => { const p = Math.min(1, (t - t0) / 1100), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(to * e); if (p < 1) requestAnimationFrame(step); };
-    requestAnimationFrame(step); setTimeout(() => el.textContent = to, 1300);
+    const step = t => { const p = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(to * e); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step); setTimeout(() => el.textContent = to, 1000);
   }
 
-  // Drag & Drop
+  // Ablegen per Drag & Drop
   const drop = $('drop');
   ['dragenter', 'dragover'].forEach(ev => addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev => addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || !e.relatedTarget) drop.classList.remove('over'); }));
   addEventListener('drop', e => [...e.dataTransfer.files].forEach(processFile));
   $('file').addEventListener('change', e => { [...e.target.files].forEach(processFile); e.target.value = ''; });
 
-  // Text einfügen
-  $('pasteBtn').onclick = () => { $('modal').classList.remove('hidden'); $('pasteArea').focus(); };
+  // Text einfügen (Dokument oder Vergleichstext)
+  const openModal = mode => {
+    pasteMode = mode;
+    $('modalTitle').textContent = mode === 'ref' ? 'Vergleichstext einfügen' : 'Text einfügen';
+    $('runPaste').textContent = mode === 'ref' ? 'Als Vergleich verwenden' : 'Prüfen';
+    $('modal').classList.remove('hidden'); $('pasteArea').focus();
+  };
+  $('pasteBtn').onclick = () => openModal('doc');
+  $('refPaste').onclick = () => openModal('ref');
   $('cancelPaste').onclick = () => $('modal').classList.add('hidden');
+  addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.add('hidden'); });
   $('runPaste').onclick = async () => {
     const t = $('pasteArea').value.trim();
-    if (t.split(/\s+/).length < 5) return alert('Bitte mindestens ein paar Sätze einfügen.');
-    $('modal').classList.add('hidden');
-    const it = addItem('Eingefügter Text ' + new Date().toLocaleTimeString('de').slice(0, 5), 'text');
+    if (t.split(/\s+/).length < 5) return alert('Bitte füge mindestens ein paar Sätze ein.');
+    $('modal').classList.add('hidden'); $('pasteArea').value = '';
+    if (pasteMode === 'ref') return setRef('eingefügter Vergleichstext', async () => SkyParsers.reflow(t));
+    const it = addItem('Eingefügter Text, ' + new Date().toLocaleTimeString('de').slice(0, 5) + ' Uhr');
     try { await waitEngine(); run(it, SkyParsers.reflow(t)); } catch (e) { it.state = 'err'; it.err = e.message; renderQueue(); }
-    $('pasteArea').value = '';
   };
   $('clearBtn').onclick = () => { items.length = 0; active = null; renderQueue(); $('report').classList.add('hidden'); $('welcome').classList.remove('hidden'); };
 
-  // Bericht exportieren
+  // Bericht speichern
   $('exportBtn').onclick = () => {
     if (!active) return;
-    const r = active.res, v = r.score < 35 ? 0 : r.score < 65 ? 1 : 2;
-    const txt = ['Sky Detect – Bericht', `Datei: ${active.name}`, `Datum: ${new Date().toLocaleString('de')}`, '',
-      `Ergebnis: ${r.score} % – ${VERD[v][0]}`, `Aussagekraft: ${CONF[r.conf]}`, '', 'Warum:',
-      ...r.sig.map(x => `  - ${x.n} (${x.s >= .6 ? 'spricht für KI' : x.s <= .3 ? 'spricht für Mensch' : 'neutral'}): ${x.s >= .6 ? x.ai : x.s <= .3 ? x.hu : x.mid}`), '',
+    const r = active.res, v = band(r.score);
+    const txt = ['Sky Detect, Prüfbericht', `Dokument: ${active.name}`, `Datum: ${new Date().toLocaleString('de')}`, '',
+      `KI-Score: ${r.score} von 100 (${VERD[v][0]})`, `Aussagekraft: ${CONF[r.conf]}`, r.mixed ? 'Hinweis: Der Text wirkt abschnittsweise sehr unterschiedlich.' : '', '', 'Begründung:',
+      ...r.sig.map(x => { const t = x.s >= .6 ? 2 : x.s <= .3 ? 0 : 1; return `  ${x.n} (${['für Mensch', 'neutral', 'für KI'][t]}): ${[x.hu, x.mid, x.ai][t]}`; }), '',
+      'Verlauf (KI-Score je Abschnitt): ' + r.chunks.map(c => c.score).join(', '), '',
       'Auffällige Formulierungen: ' + (Object.entries(r.found).map(([p, n]) => `${p} (${n})`).join(', ') || 'keine'), '',
       'Besonders KI-typische Sätze:', ...r.sents.filter(s => s.cls === 2).slice(0, 60).map(s => '  » ' + s.text.replace(/\s+/g, ' ')), '',
-      'Hinweis: Heuristische Stilanalyse – ein Indiz, kein Beweis.'].join('\n');
+      'Hinweis: Sky Detect erkennt Stilmuster. Das Ergebnis ist ein Indiz, kein Beweis.'].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
-    a.download = active.name.replace(/\.[^.]+$/, '') + '_sky-detect.txt';
+    a.download = active.name.replace(/\.[^.]+$/, '') + '_pruefbericht.txt';
     a.click(); URL.revokeObjectURL(a.href);
   };
 })();
