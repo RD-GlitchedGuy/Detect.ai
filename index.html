@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky Detect – KI-Text-Detektor</title>
+<meta name="description" content="Dokumente reinziehen und auf KI-typische Muster prüfen. Läuft komplett im Browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo"><span></span></div>
+    <div>
+      <h1>Sky <b>Detect</b></h1>
+      <p>KI-Text-Detektor · C++/WebAssembly-Engine · 100 % lokal</p>
+    </div>
+  </div>
+  <div class="engine" id="engine"><i></i><span>Engine lädt…</span></div>
+</header>
+
+<main class="layout">
+  <section class="left">
+    <label class="drop" id="drop">
+      <input type="file" id="file" multiple hidden
+        accept=".txt,.md,.pdf,.docx,.odt,.pptx,.rtf,.html,.htm,.csv,.json,.tex">
+      <div class="drop-inner">
+        <div class="drop-icon">
+          <svg viewBox="0 0 48 48"><path d="M24 32V10m0 0-9 9m9-9 9 9M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6"/></svg>
+        </div>
+        <strong>Dokumente hier reinziehen</strong>
+        <span>oder klicken · PDF, DOCX, ODT, PPTX, RTF, TXT, MD, HTML</span>
+      </div>
+    </label>
+    <button class="btn ghost wide" id="pasteBtn">✎ Text einfügen</button>
+
+    <div class="queue-head"><span>Dateien</span><button class="link" id="clearBtn">leeren</button></div>
+    <ul class="queue" id="queue"><li class="empty">Noch nichts geprüft.</li></ul>
+  </section>
+
+  <section class="right" id="result">
+    <div class="welcome" id="welcome">
+      <div class="radar"><i></i><i></i><i></i><b></b></div>
+      <h2>Bereit zum Scannen</h2>
+      <p>Sky Detect misst Satzrhythmus, Wortschatz, typische KI-Phrasen (DE/EN/ES), Satzzeichen-Profil und Formatierung – und markiert jeden Satz einzeln. Nichts verlässt deinen Browser.</p>
+    </div>
+
+    <div class="report hidden" id="report">
+      <div class="scanline"></div>
+      <div class="hero card">
+        <div class="gauge">
+          <svg viewBox="0 0 200 200">
+            <defs>
+              <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="var(--c1)"/><stop offset=".5" stop-color="var(--c2)"/><stop offset="1" stop-color="var(--c3)"/>
+              </linearGradient>
+            </defs>
+            <circle class="track" cx="100" cy="100" r="84"/>
+            <circle class="bar" id="gaugeBar" cx="100" cy="100" r="84"/>
+          </svg>
+          <div class="gauge-val"><b id="score">0</b><small>% KI</small></div>
+        </div>
+        <div class="verdict">
+          <div class="file-name" id="fileName">–</div>
+          <h2 id="verdict">–</h2>
+          <p id="verdictText"></p>
+          <div class="chips">
+            <span class="chip" id="confChip">Aussagekraft: –</span>
+            <span class="chip" id="langChip">Sprache: –</span>
+            <span class="chip" id="timeChip">–</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Signale</h3>
+          <div id="signals" class="signals"></div>
+        </div>
+        <div class="card">
+          <h3>Gefundene KI-Phrasen</h3>
+          <div id="phrases" class="phrase-cloud"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hl-head">
+          <h3>Satz-Heatmap</h3>
+          <div class="legend"><span class="l0">menschlich</span><span class="l1">unklar</span><span class="l2">KI-typisch</span></div>
+        </div>
+        <div class="hl" id="highlight"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="exportBtn">⇩ Bericht speichern</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p><b>Wichtig:</b> Kein KI-Detektor ist zuverlässig – auch dieser nicht. Das Ergebnis ist ein Indiz auf Basis von Stilmustern, kein Beweis. Sachliche, glatte oder nicht-muttersprachliche Texte werden öfter fälschlich als KI eingestuft. Bitte nie allein darauf eine Entscheidung stützen.</p>
+  <p class="made">Sky Detect · made by Sky Games</p>
+</footer>
+
+<div class="modal hidden" id="modal">
+  <div class="modal-box card">
+    <h3>Text einfügen</h3>
+    <textarea id="pasteArea" placeholder="Text hier einfügen…"></textarea>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancelPaste">Abbrechen</button>
+      <button class="btn" id="runPaste">Scannen</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/wasm-core.js"></script>
+<script src="js/parsers.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
