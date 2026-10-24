@@ -7,7 +7,7 @@
 <meta name="description" content="Dokumente ablegen und auf typische Spuren von Sprachmodellen prüfen. Läuft komplett im Browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Caveat:wght@500;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -36,7 +36,7 @@
       <ul id="queue"><li class="empty">Noch nichts geprüft.</li></ul>
     </section>
 
-    <section class="key">
+    <section class="key card-s">
       <h2>So liest du die Markierungen</h2>
       <p><mark class="m2">rosa</mark> Satz ist stark KI-typisch</p>
       <p><mark class="m1">gelb</mark> Satz ist etwas KI-typisch</p>
@@ -48,7 +48,7 @@
 
   <main class="work">
     <article class="sheet blank" id="welcome">
-      <h1>Noch kein Text auf dem Tisch</h1>
+      <h1>Noch kein Text geprüft</h1>
       <p>Leg links ein Dokument ab oder füge Text ein. Sky Detect sucht nach Spuren, die Sprachmodelle wie ChatGPT oder Claude typischerweise hinterlassen, und markiert sie Satz für Satz.</p>
       <p>Die Prüfung läuft vollständig in deinem Browser. Kein Text wird hochgeladen.</p>
     </article>
@@ -58,12 +58,9 @@
         <p class="doc-name" id="fileName"></p>
 
         <div class="grade">
-          <div class="grade-num" id="gradeNum">
-            <svg viewBox="0 0 220 140" aria-hidden="true"><path id="circlePath" d="M118 12c-52-4-104 18-106 58 0 38 50 60 104 58 54-2 96-26 92-62-3-30-42-52-96-52-30 0-54 8-70 18"/></svg>
-            <b id="score">0</b>
-          </div>
+          <div class="grade-num" id="gradeNum"><b id="score">0</b><span>von 100</span></div>
           <div class="grade-text">
-            <p class="score-label">KI-Score von 100</p>
+            <p class="score-label">KI-Score</p>
             <h2 id="verdict"></h2>
             <p id="verdictText"></p>
             <p class="meta" id="meta"></p>
@@ -77,10 +74,14 @@
         </div>
 
         <p class="mixed hidden" id="mixed"></p>
+      </article>
 
+      <article class="sheet">
         <h3>Begründung</h3>
         <ol class="reasons" id="reasons"></ol>
+      </article>
 
+      <article class="sheet">
         <h3>Verlauf durch den Text</h3>
         <p class="hint">Jeder Streifen ist ein Abschnitt von etwa 150 Wörtern. Klick auf einen Streifen, um zur Stelle im Text zu springen.</p>
         <div class="strip" id="strip"></div>
@@ -96,6 +97,9 @@
           </section>
         </div>
 
+      </article>
+
+      <article class="sheet">
         <h3>Mit einem echten Text derselben Person vergleichen</h3>
         <p class="hint">Am zuverlässigsten ist der Vergleich mit einem Text, von dem du sicher weißt, dass ihn die Person selbst geschrieben hat, am besten in derselben Textsorte.</p>
         <div class="compare-actions">
@@ -103,7 +107,16 @@
           <button class="link" id="refPaste" type="button">oder Vergleichstext einfügen</button>
         </div>
         <div id="compare"></div>
+      </article>
 
+      <article class="sheet text-sheet">
+        <div class="page" id="page">
+          <div class="body-text" id="highlight"></div>
+          <div class="margin" id="margin" aria-hidden="true"></div>
+        </div>
+      </article>
+
+      <article class="sheet">
         <details class="tech">
           <summary>Technische Messwerte</summary>
           <table id="tech"></table>
@@ -111,13 +124,6 @@
 
         <div class="sheet-foot">
           <button class="btn" id="exportBtn" type="button">Bericht speichern</button>
-        </div>
-      </article>
-
-      <article class="sheet text-sheet">
-        <div class="page" id="page">
-          <div class="body-text" id="highlight"></div>
-          <div class="margin" id="margin" aria-hidden="true"></div>
         </div>
       </article>
     </div>
